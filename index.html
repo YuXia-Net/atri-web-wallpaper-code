@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>ATRI-My Dear Moments</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {},
+      }
+    }
+  </script>
+  
+  <style type="text/tailwindcss">
+    @layer utilities {
+      .content-auto {
+        content-visibility: auto;
+      }
+      .text-shadow {
+        text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+      }
+      .menu-transition {
+        transition: opacity 0.3s ease, transform 0.3s ease;
+      }
+      .glass-effect {
+        background: rgba(255, 255, 255, 0.7);
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
+      }
+      .glass-overlay {
+        background: rgba(0, 0, 0, 0.3);
+        backdrop-filter: blur(5px);
+        -webkit-backdrop-filter: blur(5px);
+      }
+    }
+  </style>
+  
+  <style id="customFontStyle"></style>
+  <style id="fontSizeStyle"></style>
+</head>
+
+<body class="overflow-hidden font-sans text-white m-0 p-0 h-screen w-screen">
+
+  <div class="fixed top-4 left-4 z-20 flex items-center gap-2 sm:gap-4">
+    <button id="settingsBtn" class="text-xl md:text-2xl hover:text-gray-300 transition">⚙️</button>
+    <button id="aboutBtn" class="text-xl md:text-2xl hover:text-gray-300 transition">🔗</button>
+  </div>
+
+  <div id="topLeftClock" class="hidden fixed top-4 left-24 sm:left-32 z-10">
+    <div id="datetimeTopLeft" class="flex flex-wrap items-center gap-x-4 gap-y-1 text-shadow"></div>
+  </div>
+
+  <div id="topRightClock" class="hidden fixed top-4 right-4 z-10">
+    <div id="datetimeTopRight" class="flex flex-wrap items-center justify-end gap-x-4 gap-y-1 text-shadow"></div>
+  </div>
+
+  <div id="bottomLeftClock" class="hidden fixed bottom-6 left-4 z-10">
+    <div id="datetimeBottomLeft" class="text-shadow"></div>
+  </div>
+
+  <div id="bottomRightClock" class="hidden fixed bottom-6 right-4 z-10">
+    <div id="datetimeBottomRight" class="text-shadow text-right"></div>
+  </div>
+
+  <div id="musicPrompt" class="fixed inset-0 z-50 flex flex-col items-center justify-center bg-white p-4">
+    <p class="text-2xl mb-8 text-center text-gray-800">是否打开背景音乐？</p>
+    <div class="flex space-x-6">
+      <button id="musicYes" class="px-8 py-4 bg-gray-100 rounded-lg hover:bg-gray-200 transition text-lg font-medium text-gray-800">是</button>
+      <button id="musicNo" class="px-8 py-4 bg-gray-100 rounded-lg hover:bg-gray-200 transition text-lg font-medium text-gray-800">否</button>
+    </div>
+  </div>
+
+  <div id="loader" class="fixed inset-0 z-40 flex flex-col items-center justify-center bg-white hidden">
+    <p class="text-xl mb-4 text-gray-800">正在加载！亚托利正在赶来的路上！使用“F11"可以全屏哦</p>
+    <div class="w-1/3 h-3 bg-gray-200 rounded-full overflow-hidden">
+      <div id="progressBar" class="h-full bg-blue-400 w-0 transition-all duration-300"></div>
+    </div>
+  </div>
+
+  <!-- 壁纸 -->
+  <video id="bgVideo" class="fixed top-0 left-0 w-full h-full object-cover z-0" autoplay loop muted playsinline></video>
+
+  <!-- 设置 -->
+  <div id="settingsPanel" class="fixed inset-0 glass-overlay z-50 flex items-center justify-center hidden">
+    <div class="glass-effect p-6 rounded-lg shadow-xl w-11/12 max-w-md menu-transition transform scale-95 opacity-0" id="settingsContent">
+      <h3 class="text-xl mb-4 border-b border-gray-200 pb-2 font-medium text-gray-800">设置</h3>
+      <div id="settingsOptions" class="space-y-6"></div>
+      <div id="aboutContent" class="mt-6 pt-4 border-t border-gray-200 space-y-2 text-sm text-gray-700"></div>
+      <button id="closeSettings" class="mt-6 w-full py-3 bg-gray-100/80 rounded-lg hover:bg-gray-200 transition font-medium text-gray-800">关闭</button>
+    </div>
+  </div>
+
+  <!-- 链接 -->
+  <div id="aboutPanel" class="fixed inset-0 glass-overlay z-50 flex items-center justify-center hidden">
+    <div class="glass-effect p-6 rounded-lg shadow-xl w-11/12 max-w-md menu-transition transform scale-95 opacity-0" id="aboutContentPanel">
+      <h3 class="text-xl mb-4 border-b border-gray-200 pb-2 font-medium text-gray-800">链接</h3>
+      <div class="space-y-2 text-gray-700">
+        <p><a href="https://xiau.net" class="text-blue-500 hover:underline" target="_blank">夏的博客</a></p>
+      </div>
+      <button id="closeAbout" class="mt-6 w-full py-3 bg-gray-100/80 rounded-lg hover:bg-gray-200 transition font-medium text-gray-800">关闭</button>
+    </div>
+  </div>
+
+  <!-- 背景音乐 -->
+  <audio id="bgm" loop preload="none">
+    <source src="data/bgm/bgm.mp3" type="audio/mpeg">
+  </audio>
+
+  <script>
+    const isDesktopInit = window.innerWidth >= 768; // 初始化判断设备类型
+    let resizeTimeout = null; 
+    const state = {
+      isDesktop: isDesktopInit,
+      clockPosition: getCookie('clockPosition') || (isDesktopInit ? 'bottom-left' : 'bottom-left'),
+      musicEnabled: getCookie('musicEnabled') === 'true',
+      fontEnabled: getCookie('fontEnabled') === 'true',
+      fontSize: parseInt(getCookie('fontSize')) || (isDesktopInit ? 22 : 14),
+      resourcesLoaded: 0,
+      totalResources: 1,
+      loadErrors: 0
+    };
+
+    const elements = {
+      musicPrompt: document.getElementById('musicPrompt'),
+      musicYes: document.getElementById('musicYes'),
+      musicNo: document.getElementById('musicNo'),
+      loader: document.getElementById('loader'),
+      progressBar: document.getElementById('progressBar'),
+      bgVideo: document.getElementById('bgVideo'),
+      bgm: document.getElementById('bgm'),
+      
+      topLeftClock: document.getElementById('topLeftClock'),
+      topRightClock: document.getElementById('topRightClock'),
+      bottomLeftClock: document.getElementById('bottomLeftClock'),
+      bottomRightClock: document.getElementById('bottomRightClock'),
+      
+      datetimeTopLeft: document.getElementById('datetimeTopLeft'),
+      datetimeTopRight: document.getElementById('datetimeTopRight'),
+      datetimeBottomLeft: document.getElementById('datetimeBottomLeft'),
+      datetimeBottomRight: document.getElementById('datetimeBottomRight'),
+      
+      settingsBtn: document.getElementById('settingsBtn'),
+      aboutBtn: document.getElementById('aboutBtn'),
+      settingsPanel: document.getElementById('settingsPanel'),
+      settingsContent: document.getElementById('settingsContent'),
+      settingsOptions: document.getElementById('settingsOptions'),
+      aboutContent: document.getElementById('aboutContent'),
+      closeSettings: document.getElementById('closeSettings'),
+      aboutPanel: document.getElementById('aboutPanel'),
+      aboutContentPanel: document.getElementById('aboutContentPanel'),
+      closeAbout: document.getElementById('closeAbout'),
+      
+      customFontStyle: document.getElementById('customFontStyle'),
+      fontSizeStyle: document.getElementById('fontSizeStyle')
+    };
+
+    // 初始化
+    function init() {
+      setupEventListeners();
+    }
+
+    function setupMusicPrompt() {
+      elements.musicYes.addEventListener('click', () => {
+        state.musicEnabled = true;
+        setCookie('musicEnabled', true);
+        startLoading();
+      });
+      
+      elements.musicNo.addEventListener('click', () => {
+        state.musicEnabled = false;
+        setCookie('musicEnabled', false);
+        startLoading();
+      });
+    }
+
+    function startLoading() {
+      elements.musicPrompt.classList.add('opacity-0', 'transition-opacity', 'duration-500');
+      setTimeout(() => {
+        elements.musicPrompt.classList.add('hidden');
+        elements.loader.classList.remove('hidden');
+        loadResources();
+        updateDateTime();
+        setInterval(updateDateTime, 1000);
+        applyFontSize(); 
+        showCorrectClockUI();
+      }, 500);
+    }
+
+    function setupEventListeners() {
+      elements.settingsBtn.addEventListener('click', openSettings);
+      elements.aboutBtn.addEventListener('click', openAbout);
+      elements.closeSettings.addEventListener('click', closeSettings);
+      elements.closeAbout.addEventListener('click', closeAbout);
+      
+      window.addEventListener('resize', () => {
+
+        if (resizeTimeout) {
+          clearTimeout(resizeTimeout);
+        }
+        resizeTimeout = setTimeout(handleResize, 1000);
+      });
+      
+      setupMusicPrompt();
+    }
+
+    function handleResize() {
+      const isDesktop = window.innerWidth >= 768;
+
+      if (isDesktop !== state.isDesktop) {
+
+        setCookie('clockPosition', state.clockPosition);
+        window.location.reload();
+        return;
+      }
+      
+      state.isDesktop = isDesktop;
+
+      if (!getCookie('clockPosition')) {
+        state.clockPosition = isDesktop ? 'bottom-left' : 'bottom-left';
+      }
+ 
+      if (!getCookie('fontSize')) {
+        state.fontSize = isDesktop ? 22 : 14;
+        applyFontSize();
+      }
+      showCorrectClockUI();
+    }
+
+    // 资源加载
+    function loadResources() {
+
+      const videoSrc = state.isDesktop ? 'data/pc/pc.mp4' : 'data/mobile/mobile.mp4';
+      elements.bgVideo.src = videoSrc;
+      elements.bgVideo.addEventListener('loadedmetadata', handleVideoLoad);
+      elements.bgVideo.addEventListener('error', handleVideoError);
+      
+      if (state.musicEnabled) {
+        state.totalResources++;
+        setTimeout(() => {
+          elements.bgm.src = 'data/bgm/bgm.mp3';
+          elements.bgm.addEventListener('canplaythrough', handleMusicLoad);
+          elements.bgm.addEventListener('error', handleMusicError);
+          elements.bgm.load();
+        }, 100);
+      }
+      
+      if (state.fontEnabled) loadCustomFont();
+    }
+
+    function handleVideoLoad() {
+      elements.bgVideo.removeEventListener('loadedmetadata', handleVideoLoad);
+      elements.bgVideo.removeEventListener('error', handleVideoError);
+      updateProgress();
+    }
+
+    function handleVideoError() {
+      elements.bgVideo.removeEventListener('loadedmetadata', handleVideoLoad);
+      elements.bgVideo.removeEventListener('error', handleVideoError);
+      state.loadErrors++;
+      console.error('加载失败');
+      updateProgress();
+    }
+
+    function handleMusicLoad() {
+      elements.bgm.removeEventListener('canplaythrough', handleMusicLoad);
+      elements.bgm.removeEventListener('error', handleMusicError);
+      updateProgress();
+    }
+
+    function handleMusicError() {
+      elements.bgm.removeEventListener('canplaythrough', handleMusicLoad);
+      elements.bgm.removeEventListener('error', handleMusicError);
+      state.loadErrors++;
+      console.error('背景音乐加载失败');
+      updateProgress();
+    }
+
+    function loadCustomFont() {
+      elements.customFontStyle.textContent = `
+        @font-face {
+          font-family: 'CustomFont';
+          src: url('data/font/font.woff2') format('woff2');
+          font-display: swap;
+        }
+        body { font-family: 'CustomFont', sans-serif !important; }
+      `;
+    }
+
+    function updateProgress() {
+      state.resourcesLoaded++;
+      const progress = (state.resourcesLoaded / state.totalResources) * 100;
+      elements.progressBar.style.width = `${progress}%`;
+      
+      if (state.resourcesLoaded >= state.totalResources) {
+        setTimeout(() => {
+          elements.loader.classList.add('opacity-0', 'transition-opacity', 'duration-500');
+          setTimeout(() => {
+            elements.loader.classList.add('hidden');
+            if (state.loadErrors > 0) {
+              alert(`部分资源加载失败(${state.loadErrors}/${state.totalResources})，可能影响体验`);
+            }
+            startBgmIfEnabled();
+            showCorrectClockUI();
+          }, 500);
+        }, 500);
+      }
+    }
+
+    function getClockElementId(position) {
+      return position.replace(/-([a-z])/g, (match, letter) => letter.toUpperCase()) + 'Clock';
+    }
+
+    function showCorrectClockUI() {
+      ['topLeftClock', 'topRightClock', 'bottomLeftClock', 'bottomRightClock'].forEach(id => {
+        elements[id].classList.add('hidden');
+      });
+      
+      if (state.clockPosition === 'closed') return;
+      
+      const clockId = getClockElementId(state.clockPosition);
+      if (elements[clockId]) {
+        elements[clockId].classList.remove('hidden');
+      } else {
+        console.warn(`未找到时钟元素: ${clockId}`);
+        elements.topLeftClock.classList.remove('hidden');
+      }
+    }
+
+    function updateDateTime() {
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = now.getMonth() + 1;
+      const day = now.getDate();
+      const dateStr = `${year}/${month}/${day}`;
+      
+      const hours = String(now.getHours()).padStart(2, '0');
+      const minutes = String(now.getMinutes()).padStart(2, '0');
+      const seconds = String(now.getSeconds()).padStart(2, '0');
+      const timeStr = `${hours}:${minutes}:${seconds}`;
+      
+      const weekdays = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'];
+      const weekday = weekdays[now.getDay()];
+      let period = hours >= 5 && hours < 9 ? '早上'
+                 : hours >= 9 && hours < 12 ? '上午'
+                 : hours >= 12 && hours < 14 ? '中午'
+                 : hours >= 14 && hours < 18 ? '下午'
+                 : hours >= 18 && hours < 22 ? '晚上'
+                 : '凌晨';
+      
+      const dateWithEmoji = `📅 ${dateStr}`;
+      const weekdayWithEmoji = `🗓️ ${weekday}`;
+      const periodWithEmoji = `⏳ ${period}`;
+      const timeWithEmoji = `⌚ ${timeStr}`;
+      
+      elements.datetimeTopLeft.innerHTML = `
+        <div class="whitespace-nowrap">${dateWithEmoji}</div>
+        <div class="whitespace-nowrap">${weekdayWithEmoji}</div>
+        <div class="whitespace-nowrap">${periodWithEmoji}</div>
+        <div class="whitespace-nowrap">${timeWithEmoji}</div>
+      `;
+      
+      elements.datetimeTopRight.innerHTML = `
+        <div class="whitespace-nowrap">${timeWithEmoji}</div>
+        <div class="whitespace-nowrap">${periodWithEmoji}</div>
+        <div class="whitespace-nowrap">${weekdayWithEmoji}</div>
+        <div class="whitespace-nowrap">${dateWithEmoji}</div>
+      `;
+      
+      elements.datetimeBottomLeft.innerHTML = `
+        <div class="mb-1">${dateWithEmoji}</div>
+        <div class="mb-1">${weekdayWithEmoji}</div>
+        <div class="flex flex-wrap items-center gap-x-4">
+          <div>${timeWithEmoji}</div>
+          <div>${periodWithEmoji}</div>
+        </div>
+      `;
+      
+      elements.datetimeBottomRight.innerHTML = `
+        <div class="mb-1">${dateWithEmoji}</div>
+        <div class="mb-1">${weekdayWithEmoji}</div>
+        <div class="flex flex-wrap justify-end items-center gap-x-4">
+          <div>${timeWithEmoji}</div>
+          <div>${periodWithEmoji}</div>
+        </div>
+      `;
+    }
+
+    function applyFontSize() {
+      const topSize = `${state.fontSize}px`;
+      const bottomSize = `${state.fontSize * 1.5}px`;
+      
+      elements.fontSizeStyle.textContent = `
+        #datetimeTopLeft div, #datetimeTopRight div { 
+          font-size: ${topSize}; 
+          margin-right: 0.5rem;
+        }
+        #datetimeBottomLeft, #datetimeBottomRight { 
+          font-size: ${bottomSize}; 
+        }
+        #datetimeBottomLeft > div, #datetimeBottomRight > div { 
+          line-height: 1.3; 
+        }
+      `;
+    }
+
+    function startBgmIfEnabled() {
+      if (state.musicEnabled) {
+        elements.bgm.play().catch(e => {
+          console.log('自动播放失败:', e);
+          setTimeout(() => alert('背景音乐播放失败'), 1000);
+        });
+      } else {
+        elements.bgm.pause();
+      }
+    }
+
+    function openSettings() {
+      elements.settingsOptions.innerHTML = `
+        <div>
+          <label class="block mb-2 font-medium text-gray-800">设置时钟位置</label>
+          <div class="flex flex-wrap gap-3">
+            <button id="posTopLeft" class="px-4 py-2 rounded-lg transition ${state.clockPosition === 'top-left' ? 'bg-gray-200' : 'bg-gray-100 hover:bg-gray-200'} text-gray-800">左上</button>
+            <button id="posTopRight" class="px-4 py-2 rounded-lg transition ${state.clockPosition === 'top-right' ? 'bg-gray-200' : 'bg-gray-100 hover:bg-gray-200'} text-gray-800">右上</button>
+            <button id="posBottomLeft" class="px-4 py-2 rounded-lg transition ${state.clockPosition === 'bottom-left' ? 'bg-gray-200' : 'bg-gray-100 hover:bg-gray-200'} text-gray-800">左下</button>
+            <button id="posBottomRight" class="px-4 py-2 rounded-lg transition ${state.clockPosition === 'bottom-right' ? 'bg-gray-200' : 'bg-gray-100 hover:bg-gray-200'} text-gray-800">右下</button>
+            <button id="posClosed" class="px-4 py-2 rounded-lg transition ${state.clockPosition === 'closed' ? 'bg-gray-200' : 'bg-gray-100 hover:bg-gray-200'} text-gray-800">关闭</button>
+          </div>
+        </div>
+        
+        <div>
+          <label class="flex items-center justify-between">
+            <span class="text-gray-800">开启背景音乐</span>
+            <input type="checkbox" ${state.musicEnabled ? 'checked' : ''} class="accent-blue-400" id="musicSetting">
+          </label>
+        </div>
+        
+        <div>
+          <label class="flex items-center justify-between">
+            <span class="text-gray-800">开启艺术字体</span>
+            <input type="checkbox" ${state.fontEnabled ? 'checked' : ''} class="accent-blue-400" id="fontSetting">
+          </label>
+        </div>
+        
+        <div>
+          <label class="block mb-2 font-medium text-gray-800">字体大小 (px)</label>
+          <input type="number" id="fontSizeInput" min="12" max="36" value="${state.fontSize}" 
+                 class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400 text-gray-800">
+        </div>
+      `;
+      
+      document.getElementById('posTopLeft').addEventListener('click', () => setClockPosition('top-left'));
+      document.getElementById('posTopRight').addEventListener('click', () => setClockPosition('top-right'));
+      document.getElementById('posBottomLeft').addEventListener('click', () => setClockPosition('bottom-left'));
+      document.getElementById('posBottomRight').addEventListener('click', () => setClockPosition('bottom-right'));
+      document.getElementById('posClosed').addEventListener('click', () => setClockPosition('closed'));
+      
+      document.getElementById('musicSetting').addEventListener('change', (e) => {
+        state.musicEnabled = e.target.checked;
+        setCookie('musicEnabled', state.musicEnabled);
+        startBgmIfEnabled();
+        alert(state.musicEnabled ? '已开启背景音乐，请等待加载' : '已关闭背景音乐');
+      });
+      
+      document.getElementById('fontSetting').addEventListener('change', (e) => {
+        state.fontEnabled = e.target.checked;
+        setCookie('fontEnabled', state.fontEnabled);
+        state.fontEnabled ? loadCustomFont() : (elements.customFontStyle.textContent = '');
+        alert(state.fontEnabled ? '已开启艺术字体，请等待加载' : '已关闭艺术字体');
+      });
+      
+      document.getElementById('fontSizeInput').addEventListener('change', (e) => {
+        let size = parseInt(e.target.value) || 12;
+        size = Math.min(Math.max(size, 12), 36);
+        e.target.value = size;
+        state.fontSize = size;
+        setCookie('fontSize', size);
+        applyFontSize();
+      });
+      
+      elements.aboutContent.innerHTML = `
+        <p>此网站由“夏”开发，版本:V1.1 <a href="https://xiau.net" class="text-blue-500 hover:underline" target="_blank">夏的博客</a></p>
+        <p>壁纸引擎原作：<a href="https://steamcommunity.com/sharedfiles/filedetails/?id=2807220985" class="text-blue-500 hover:underline" target="_blank">ATRI-My Dear Moments</a></p>
+        <p>背景音乐:<a href="https://music.163.com/#/song?id=29803287" class="text-blue-500 hover:underline" target="_blank">Komorebi</a></p>
+        <p>艺术字体：北半川随心体</p>
+      `;
+      
+      elements.settingsPanel.classList.remove('hidden');
+      setTimeout(() => {
+        elements.settingsContent.classList.remove('scale-95', 'opacity-0');
+        elements.settingsContent.classList.add('scale-100', 'opacity-100');
+      }, 10);
+    }
+
+    function setClockPosition(position) {
+      state.clockPosition = position;
+      setCookie('clockPosition', position); 
+      showCorrectClockUI();
+    }
+
+    function closeSettings() {
+      elements.settingsContent.classList.remove('scale-100', 'opacity-100');
+      elements.settingsContent.classList.add('scale-95', 'opacity-0');
+      setTimeout(() => elements.settingsPanel.classList.add('hidden'), 300);
+    }
+
+    function openAbout() {
+      elements.aboutPanel.classList.remove('hidden');
+      setTimeout(() => {
+        elements.aboutContentPanel.classList.remove('scale-95', 'opacity-0');
+        elements.aboutContentPanel.classList.add('scale-100', 'opacity-100');
+      }, 10);
+    }
+
+    function closeAbout() {
+      elements.aboutContentPanel.classList.remove('scale-100', 'opacity-100');
+      elements.aboutContentPanel.classList.add('scale-95', 'opacity-0');
+      setTimeout(() => elements.aboutPanel.classList.add('hidden'), 300);
+    }
+
+    function setCookie(name, value, days = 365) {
+      const date = new Date();
+      date.setTime(date.getTime() + (days * 24 * 60 * 60 * 1000));
+      document.cookie = `${name}=${value};expires=${date.toUTCString()};path=/`;
+    }
+
+    function getCookie(name) {
+      const nameEQ = `${name}=`;
+      for (let c of document.cookie.split(';')) {
+        while (c.charAt(0) === ' ') c = c.substring(1);
+        if (c.indexOf(nameEQ) === 0) return c.substring(nameEQ.length);
+      }
+      return null;
+    }
+
+    // 初始化
+    window.addEventListener('DOMContentLoaded', init);
+  </script>
+</body>
+</html>
